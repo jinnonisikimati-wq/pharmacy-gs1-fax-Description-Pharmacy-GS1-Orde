@@ -1,41 +1,697 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>医薬品FAX発注 試作</title><style>
-:root{font-family:system-ui,"Noto Sans JP",sans-serif;color:#163046;background:#f2f6fa}*{box-sizing:border-box}body{margin:0}header{background:#113e61;color:white;padding:17px 20px}header h1{margin:0;font-size:1.22rem}header small{color:#cae0ed}main{max-width:950px;margin:18px auto;padding:0 12px 36px}.panel{background:white;padding:17px;border-radius:14px;box-shadow:0 2px 8px #1232;margin:12px 0}h2{font-size:1.04rem;margin:0 0 12px}label{font-size:.9rem;font-weight:600;display:block;margin:8px 0 4px}input,select,button{font:inherit}input,select{padding:11px;width:100%;border:1px solid #b7c6d1;border-radius:8px}button{border:0;background:#0f6092;color:white;border-radius:8px;padding:11px 14px;font-weight:600;cursor:pointer}button.secondary{background:#e3edf4;color:#164567}button.danger{background:#ad3442}button:disabled{opacity:.45;cursor:not-allowed}.row{display:flex;align-items:end;gap:10px;flex-wrap:wrap}.row>*{flex:1 1 180px}.row button{flex:0 0 auto}.hint{font-size:.82rem;color:#546779;line-height:1.55}.alert{background:#fff4dd;padding:10px;border-radius:8px;font-size:.88rem}.ok{color:#176e46}.bad{color:#ad3442}.result{background:#edf7fe;padding:12px;border-radius:8px}table{width:100%;border-collapse:collapse}th,td{padding:9px 6px;border-bottom:1px solid #e1e8ef;text-align:left;font-size:.89rem}th{background:#eef3f7}.scroll{overflow:auto}video{width:100%;max-height:260px;background:#1e2834;border-radius:8px}.tiny{font-size:.74rem}.printOnly{display:none}@media print{body{background:white;color:black}header,.noPrint{display:none!important}main{max-width:none;margin:0;padding:0}.panel{box-shadow:none;border:0;padding:0}.printOnly{display:block}.printOnly table td,.printOnly table th{border:1px solid #777;padding:7px}.printOnly h1{text-align:center;font-size:22px}.printOnly .meta{display:flex;justify-content:space-between}.printOnly .foot{margin-top:20px}.printOnly .notice{font-size:11px}.printOnly{break-inside:avoid}}
-</style></head><body><header><h1>医薬品 FAX発注（試作版）</h1><small>Android・パソコン対応 | 外部送信なし</small></header><main>
-<div class="panel noPrint"><div class="alert"><strong>試作用です。</strong> 商品名は登録済マスタから取得します。未登録のコードから品名は自動判定できません。GS1 DataBar限定型・合成シンボルのカメラ読取は対応未保証です。発注前に必ず規格・包装・数量を照合してください。</div></div>
-<section class="panel noPrint"><h2>1. GS1・GTIN読取</h2><div class="row"><button id="start">カメラ開始</button><button id="stop" class="secondary">カメラ停止</button><span class="hint" id="cameraStatus">未起動</span></div><video id="video" playsinline muted autoplay hidden></video><p class="hint">カメラはHTTPSまたはlocalhostで利用できます。Android ChromeのBarcodeDetectorで対応する形式のみ読めます。読み取れない場合は下の入力欄にGTINを入力してください。</p><div class="row"><div><label for="code">GS1文字列 または GTIN（13/14桁）</label><input id="code" inputmode="text" placeholder="例: (01)04912345678904"></div><button id="lookup">コード解析・商品検索</button></div><p id="decode" class="hint" aria-live="polite"></p></section>
-<section class="panel noPrint"><h2>2. 医薬品確認・注文追加</h2><div class="row"><div><label>医薬品名</label><input id="drug" readonly placeholder="コードを読み取ってください"></div><div><label>包装規格</label><input id="pack" readonly></div><div><label>メーカー</label><input id="maker" readonly></div></div><div class="row"><div><label>発注数量（包装単位）</label><input id="qty" type="number" min="1" max="9999" step="1" value="1"></div><div><label>発注先</label><select id="supplier"></select></div><button id="add" disabled>注文書へ追加</button></div><p id="productMsg" class="hint" aria-live="polite"></p></section>
-<section class="panel noPrint"><h2>3. 注文内容・FAX注文書</h2><div class="row"><div><label>発注元（薬局名）</label><input id="pharmacy" placeholder="〇〇薬局"></div><div><label>発注元FAX</label><input id="fromfax"></div><div><label>卸の宛先</label><select id="orderSupplier"></select></div><div><label>宛先FAX</label><input id="tofax"></div></div><div class="scroll"><table><thead><tr><th>薬品名</th><th>包装</th><th>数量</th><th>卸</th><th>操作</th></tr></thead><tbody id="lines"></tbody></table></div><p id="summary" class="hint"></p><div class="row"><button id="print">選択卸の注文書を印刷 / PDF保存</button><button id="export" class="secondary">注文内容CSV出力</button><button id="clear" class="danger">注文一覧を消去</button></div><p class="hint">注文書はFAX送信されません。印刷またはPDF保存後、別途FAX送信し、受付を確認してください。注文データはこのブラウザのローカル保存のみで、別端末と同期しません。</p></section>
-<section class="panel noPrint"><h2>4. 医薬品マスタ登録</h2><p class="hint">この試作は、医薬品名と包装をGTINに結びつけたマスタを使用します。まず登録した商品を読み取って検証してください。</p><div class="row"><div><label>GTIN 13または14桁</label><input id="mgtin" inputmode="numeric" placeholder="実物のGTIN"></div><div><label>医薬品名</label><input id="mname"></div><div><label>包装規格</label><input id="mpack" placeholder="PTP100錠"></div><div><label>メーカー</label><input id="mmaker"></div><div><label>卸</label><input id="msupplier" placeholder="卸A"></div><button id="register">マスタ登録</button></div><p class="hint">CSV一括登録（UTF-8）：ヘッダ <code>gtin,name,pack,maker,supplier</code>。GTINは先頭ゼロを落とさず文字列で管理してください。</p><div class="row"><input id="csv" type="file" accept=".csv,text/csv"><button id="template" class="secondary">マスタCSV見本</button><button id="masterExport" class="secondary">登録マスタCSV出力</button></div><p id="masterStatus" class="hint"></p></section>
-<section class="printOnly" id="paper"><h1>医薬品注文書</h1><div class="meta"><div>宛先：<strong id="pSupplier"></strong> 御中</div><div>発注日：<span id="pDate"></span></div></div><p>発注元：<span id="pPharmacy"></span>　FAX：<span id="pFromFax"></span></p><p>送信先FAX：<span id="pToFax"></span></p><table><thead><tr><th>No.</th><th>医薬品名・規格</th><th>包装</th><th>数量（包装）</th></tr></thead><tbody id="pLines"></tbody></table><p class="foot">備考：______________________________________________________</p><p class="notice">送信前に薬品名・規格・包装・数量・送付先を確認してください。</p></section>
-</main><script>
+
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>医薬品FAX発注 GS1対応 v0.2</title>
+<style>
+:root{font-family:system-ui,"Noto Sans JP",sans-serif;color:#163046;background:#f2f6fa}
+*{box-sizing:border-box}
+body{margin:0}
+header{background:#113e61;color:white;padding:17px 20px}
+header h1{margin:0;font-size:1.22rem}
+header small{color:#cae0ed}
+main{max-width:950px;margin:18px auto;padding:0 12px 36px}
+.panel{background:white;padding:17px;border-radius:14px;box-shadow:0 2px 8px #1232;margin:12px 0}
+h2{font-size:1.04rem;margin:0 0 12px}
+label{font-size:.9rem;font-weight:600;display:block;margin:8px 0 4px}
+input,select,button{font:inherit}
+input,select{padding:11px;width:100%;border:1px solid #b7c6d1;border-radius:8px}
+button{border:0;background:#0f6092;color:white;border-radius:8px;padding:11px 14px;font-weight:600;cursor:pointer}
+button.secondary{background:#e3edf4;color:#164567}
+button.danger{background:#ad3442}
+button:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;align-items:end;gap:10px;flex-wrap:wrap}
+.row>*{flex:1 1 180px}
+.row button{flex:0 0 auto}
+.hint{font-size:.82rem;color:#546779;line-height:1.55}
+.alert{background:#fff4dd;padding:10px;border-radius:8px;font-size:.88rem}
+.ok{color:#176e46}
+.bad{color:#ad3442}
+.result{background:#edf7fe;padding:12px;border-radius:8px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:9px 6px;border-bottom:1px solid #e1e8ef;text-align:left;font-size:.89rem}
+th{background:#eef3f7}
+.scroll{overflow:auto}
+video{width:100%;max-height:260px;background:#1e2834;border-radius:8px}
+.tiny{font-size:.74rem}
+.printOnly{display:none}
+@media print{
+body{background:white;color:black}
+header,.noPrint{display:none!important}
+main{max-width:none;margin:0;padding:0}
+.panel{box-shadow:none;border:0;padding:0}
+.printOnly{display:block}
+.printOnly table td,.printOnly table th{border:1px solid #777;padding:7px}
+.printOnly h1{text-align:center;font-size:22px}
+.printOnly .meta{display:flex;justify-content:space-between}
+.printOnly .foot{margin-top:20px}
+.printOnly .notice{font-size:11px}
+.printOnly{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<header>
+<h1>医薬品 FAX発注（GS1対応 v0.2）</h1>
+<small>Android・パソコン対応 | 外部送信なし</small>
+</header>
+<main>
+
+<div class="panel noPrint">
+<div class="alert">
+<strong>試作用です。</strong>
+商品名は登録済マスタから取得します。未登録のコードから品名は自動判定できません。
+GS1 DataBar Limitedに対応するZXing-WASMを使用しますが、合成シンボル全体や実物の読み取り成功は未検証です。
+発注前に必ず規格・包装・数量を照合してください。
+</div>
+</div>
+
+<section class="panel noPrint">
+<h2>1. GS1・GTIN読取</h2>
+<div class="row">
+<button id="start">カメラ開始</button>
+<button id="stop" class="secondary">カメラ停止</button>
+<span class="hint" id="cameraStatus">未起動</span>
+</div>
+<video id="video" playsinline muted autoplay hidden></video>
+<canvas id="capture" hidden></canvas>
+<div>
+<label for="photo">カメラで読めない場合：GS1を撮影した写真から解析</label>
+<input id="photo" type="file" accept="image/*" capture="environment">
+</div>
+<p class="hint">
+カメラはHTTPSまたはlocalhostで利用できます。
+GS1 DataBar Limitedに対応するZXing-WASMで解析します。
+通信環境によってライブラリを読み込めない場合は診断表示をご確認ください。
+</p>
+<div class="row">
+<div>
+<label for="code">GS1文字列 または GTIN（13/14桁）</label>
+<input id="code" inputmode="text" placeholder="例: (01)04912345678904">
+</div>
+<button id="lookup">コード解析・商品検索</button>
+</div>
+<p id="decode" class="hint" aria-live="polite"></p>
+</section>
+
+<section class="panel noPrint">
+<h2>2. 医薬品確認・注文追加</h2>
+<div class="row">
+<div><label>医薬品名</label><input id="drug" readonly placeholder="コードを読み取ってください"></div>
+<div><label>包装規格</label><input id="pack" readonly></div>
+<div><label>メーカー</label><input id="maker" readonly></div>
+</div>
+<div class="row">
+<div><label>発注数量（包装単位）</label><input id="qty" type="number" min="1" max="9999" step="1" value="1"></div>
+<div><label>発注先</label><select id="supplier"></select></div>
+<button id="add" disabled>注文書へ追加</button>
+</div>
+<p id="productMsg" class="hint" aria-live="polite"></p>
+</section>
+
+<section class="panel noPrint">
+<h2>3. 注文内容・FAX注文書</h2>
+<div class="row">
+<div><label>発注元（薬局名）</label><input id="pharmacy" placeholder="〇〇薬局"></div>
+<div><label>発注元FAX</label><input id="fromfax"></div>
+<div><label>卸の宛先</label><select id="orderSupplier"></select></div>
+<div><label>宛先FAX</label><input id="tofax"></div>
+</div>
+<div class="scroll">
+<table>
+<thead><tr><th>薬品名</th><th>包装</th><th>数量</th><th>卸</th><th>操作</th></tr></thead>
+<tbody id="lines"></tbody>
+</table>
+</div>
+<p id="summary" class="hint"></p>
+<div class="row">
+<button id="print">選択卸の注文書を印刷 / PDF保存</button>
+<button id="export" class="secondary">注文内容CSV出力</button>
+<button id="clear" class="danger">注文一覧を消去</button>
+</div>
+<p class="hint">
+注文書はFAX送信されません。印刷またはPDF保存後、別途FAX送信し、受付を確認してください。
+注文データはこのブラウザのローカル保存のみで、別端末と同期しません。
+</p>
+</section>
+
+<section class="panel noPrint">
+<h2>4. 医薬品マスタ登録</h2>
+<p class="hint">
+この試作は、医薬品名と包装をGTINに結びつけたマスタを使用します。
+まず登録した商品を読み取って検証してください。
+</p>
+<div class="row">
+<div><label>GTIN 13または14桁</label><input id="mgtin" inputmode="numeric" placeholder="実物のGTIN"></div>
+<div><label>医薬品名</label><input id="mname"></div>
+<div><label>包装規格</label><input id="mpack" placeholder="PTP100錠"></div>
+<div><label>メーカー</label><input id="mmaker"></div>
+<div><label>卸</label><input id="msupplier" placeholder="卸A"></div>
+<button id="register">マスタ登録</button>
+</div>
+<p class="hint">
+CSV一括登録（UTF-8）：ヘッダ <code>gtin,name,pack,maker,supplier</code>。
+GTINは先頭ゼロを落とさず文字列で管理してください。
+</p>
+<div class="row">
+<input id="csv" type="file" accept=".csv,text/csv">
+<button id="template" class="secondary">マスタCSV見本</button>
+<button id="masterExport" class="secondary">登録マスタCSV出力</button>
+</div>
+<p id="masterStatus" class="hint"></p>
+</section>
+
+<section class="printOnly" id="paper">
+<h1>医薬品注文書</h1>
+<div class="meta">
+<div>宛先：<strong id="pSupplier"></strong> 御中</div>
+<div>発注日：<span id="pDate"></span></div>
+</div>
+<p>発注元：<span id="pPharmacy"></span>　FAX：<span id="pFromFax"></span></p>
+<p>送信先FAX：<span id="pToFax"></span></p>
+<table>
+<thead><tr><th>No.</th><th>医薬品名・規格</th><th>包装</th><th>数量（包装）</th></tr></thead>
+<tbody id="pLines"></tbody>
+</table>
+<p class="foot">備考：______________________________________________________</p>
+<p class="notice">送信前に薬品名・規格・包装・数量・送付先を確認してください。</p>
+</section>
+</main>
+
+<script>
 'use strict';
-const $=id=>document.getElementById(id);const load=(k,def)=>{try{return JSON.parse(localStorage.getItem(k))??def}catch{return def}};let products=load('gs1_products',{}),orders=load('gs1_orders',[]),active=null,stream=null,scanTimer=null,busy=false;let savedSupplier='';
-const save=()=>{localStorage.setItem('gs1_products',JSON.stringify(products));localStorage.setItem('gs1_orders',JSON.stringify(orders))};
+
+const $=id=>document.getElementById(id);
+const load=(k,def)=>{
+ try{return JSON.parse(localStorage.getItem(k))??def}
+ catch{return def}
+};
+
+let products=load('gs1_products',{}),
+    orders=load('gs1_orders',[]),
+    active=null,
+    stream=null,
+    scanTimer=null,
+    busy=false;
+
+let savedSupplier='';
+
+const save=()=>{
+ localStorage.setItem('gs1_products',JSON.stringify(products));
+ localStorage.setItem('gs1_orders',JSON.stringify(orders))
+};
+
 const digits=s=>String(s??'').replace(/\D/g,'');
-function validGtin(s){if(!/^\d{13,14}$/.test(s))return false;const a=[...s].map(Number);const check=a.pop();let sum=0;for(let i=a.length-1,j=0;i>=0;i--,j++)sum+=a[i]*(j%2===0?3:1);return (10-sum%10)%10===check}
-function normalize(s){const d=digits(s);if(!validGtin(d))return null;return d.padStart(14,'0')}
-function extract(raw){let s=String(raw).trim();let m=s.match(/\(01\)\s*(\d{14})|(?:^|\x1d|\]C1|\]d2)01(\d{14})/);if(m)return normalize(m[1]||m[2]);if(/^\d{13,14}$/.test(s))return normalize(s);return null}
-function message(el,text,bad=false){el.textContent=text;el.className=bad?'hint bad':'hint ok'}
-function suppliers(){let list=[...new Set([...Object.values(products).map(x=>x.supplier),...orders.map(x=>x.supplier)].filter(Boolean))];if(!list.length)list=['卸A'];for(const id of ['supplier','orderSupplier']){const select=$(id),value=select.value;select.replaceChildren();for(const s of list){const o=document.createElement('option');o.value=s;o.textContent=s;select.append(o)}if(list.includes(value))select.value=value}}
-function searchCode(raw){$('code').value=raw;let gtin=extract(raw);active=null;$('add').disabled=true;for(const id of ['drug','pack','maker'])$(id).value='';if(!gtin){message($('decode'),'有効なGTINを抽出できませんでした。GS1の(01) + 14桁、または13/14桁を入力してください。',true);return}message($('decode'),'GTIN-14: '+gtin+'（チェックデジット確認済）');let p=products[gtin];if(!p){message($('productMsg'),'未登録のGTINです。下の医薬品マスタ登録で品名・包装を登録してください。',true);$('mgtin').value=gtin;return}active={...p,gtin};$('drug').value=p.name;$('pack').value=p.pack;$('maker').value=p.maker;$('supplier').value=p.supplier;$('add').disabled=false;message($('productMsg'),'医薬品名・包装・メーカーを現物と照合してください。')}
-$('lookup').onclick=()=>searchCode($('code').value);$('code').onkeydown=e=>{if(e.key==='Enter')searchCode($('code').value)};
-$('register').onclick=()=>{const gtin=normalize($('mgtin').value),name=$('mname').value.trim(),pack=$('mpack').value.trim(),maker=$('mmaker').value.trim(),supplier=$('msupplier').value.trim();if(!gtin||!name||!pack||!supplier){message($('masterStatus'),'GTIN（チェックデジット有効）、薬品名、包装、卸を入力してください。',true);return}products[gtin]={name,pack,maker,supplier};save();suppliers();message($('masterStatus'),'登録しました: '+gtin);if(extract($('code').value)===gtin)searchCode($('code').value)};
-$('add').onclick=()=>{if(!active)return;let q=Number($('qty').value);if(!Number.isSafeInteger(q)||q<1||q>9999){alert('数量は1〜9999の整数にしてください');return}const supplier=$('supplier').value;if(!supplier){alert('卸を選択してください');return}let key=orders.findIndex(x=>x.gtin===active.gtin&&x.supplier===supplier);if(key>=0){if(orders[key].qty+q>9999){alert('数量の上限を超えます');return}orders[key].qty+=q}else orders.push({...active,supplier,qty:q});save();render();$('qty').value='1';message($('productMsg'),'注文一覧に追加しました。')};
-function render(){suppliers();const body=$('lines');body.replaceChildren();for(let i=0;i<orders.length;i++){const x=orders[i],tr=document.createElement('tr');for(const v of [x.name,x.pack,String(x.qty),x.supplier]){let td=document.createElement('td');td.textContent=v;tr.append(td)}let td=document.createElement('td'),b=document.createElement('button');b.className='secondary tiny';b.textContent='削除';b.onclick=()=>{orders.splice(i,1);save();render()};td.append(b);tr.append(td);body.append(tr)}$('summary').textContent=`${orders.length}品目 / 合計${orders.reduce((a,x)=>a+x.qty,0)}包装`;}
-$('clear').onclick=()=>{if(confirm('注文一覧を消去しますか？')){orders=[];save();render()}};
-function populatePaper(){const supplier=$('orderSupplier').value,lines=orders.filter(x=>x.supplier===supplier);if(!lines.length){alert('選択した卸の注文商品がありません');return false}for(const [id,t] of [['pSupplier',supplier],['pDate',new Date().toLocaleDateString('ja-JP')],['pPharmacy',$('pharmacy').value],['pFromFax',$('fromfax').value],['pToFax',$('tofax').value]])$(id).textContent=t;const tbody=$('pLines');tbody.replaceChildren();lines.forEach((x,i)=>{const tr=document.createElement('tr');for(let v of [String(i+1),x.name,x.pack,x.qty+'包装']){const td=document.createElement('td');td.textContent=v;tr.append(td)}tbody.append(tr)});return true}
-$('print').onclick=()=>{if(!$('pharmacy').value.trim()||!$('tofax').value.trim()){alert('発注元と送付先FAXを入力してください');return}if(populatePaper())window.print()};
-function csvCell(s){return '"'+String(s??'').replace(/^([=+\-@\t\r])/,'\'$1').replace(/"/g,'""')+'"'}
-function downloadCsv(name,rows){const csv='\uFEFF'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-$('export').onclick=()=>downloadCsv('orders.csv',[['gtin','name','pack','maker','supplier','qty'],...orders.map(x=>[x.gtin,x.name,x.pack,x.maker,x.supplier,x.qty])]);
-$('template').onclick=()=>downloadCsv('master_template.csv',[['gtin','name','pack','maker','supplier'],['', '医薬品名（例）','PTP100錠','メーカー名','卸A']]);
-$('masterExport').onclick=()=>downloadCsv('master_backup.csv',[['gtin','name','pack','maker','supplier'],...Object.entries(products).map(([k,v])=>[k,v.name,v.pack,v.maker,v.supplier])]);
-// UTF-8 CSV; basic RFC4180 including escaped quotation marks and embedded newlines.
-function parseCsv(text){let rows=[],row=[],part='',quoted=false;for(let i=0;i<text.length;i++){let c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){part+='"';i++}else quoted=!quoted}else if(c===','&&!quoted){row.push(part);part=''}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(part);if(row.some(x=>x!==''))rows.push(row);row=[];part=''}else part+=c}if(part||row.length){row.push(part);rows.push(row)}return rows}
-$('csv').onchange=async e=>{const f=e.target.files[0];if(!f)return;const rows=parseCsv((await f.text()).replace(/^\uFEFF/,''));if(rows.length<2||rows[0].join(',')!=='gtin,name,pack,maker,supplier'){message($('masterStatus'),'CSV列は gtin,name,pack,maker,supplier にしてください。',true);return}let count=0,rejected=0;for(const r of rows.slice(1)){let g=normalize(r[0]);if(!g||!r[1]?.trim()||!r[2]?.trim()||!r[4]?.trim()){rejected++;continue}products[g]={name:r[1].trim(),pack:r[2].trim(),maker:(r[3]||'').trim(),supplier:r[4].trim()};count++}save();suppliers();message($('masterStatus'),`登録 ${count} 件 / 除外 ${rejected} 件。GTINと包装を確認してください。`);e.target.value=''};
-function persist(id){$(id).value=load('f_'+id,'');$(id).oninput=()=>localStorage.setItem('f_'+id,JSON.stringify($(id).value))}['pharmacy','fromfax','tofax'].forEach(persist);
-let detector=null;
-$('start').onclick=async()=>{if(!navigator.mediaDevices?.getUserMedia){message($('cameraStatus'),'HTTPS対応ブラウザで開いてください。',true);return}try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});$('video').srcObject=stream;$('video').hidden=false;await $('video').play();if(!('BarcodeDetector' in window)){message($('cameraStatus'),'このブラウザはBarcodeDetector非対応です。手入力で試験してください。',true);return}let formats=await BarcodeDetector.getSupportedFormats();let use=['data_matrix','ean_13','ean_8','code_128','itf','upc_a','upc_e','qr_code'].filter(x=>formats.includes(x));if(!use.length){message($('cameraStatus'),'対応形式がありません。',true);return}detector=new BarcodeDetector({formats:use});message($('cameraStatus'),'読取中（対応形式: '+use.join(', ')+'）');clearInterval(scanTimer);scanTimer=setInterval(async()=>{if(busy||!detector||$('video').readyState<2)return;busy=true;try{let codes=await detector.detect($('video'));for(let c of codes){if(extract(c.rawValue)){searchCode(c.rawValue);stopCam();break}}}catch(e){}finally{busy=false}},350)}catch(e){message($('cameraStatus'),'カメラを起動できません: '+e.message,true)}};
-function stopCam(){clearInterval(scanTimer);scanTimer=null;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').hidden=true;$('video').srcObject=null;detector=null}
-$('stop').onclick=()=>{stopCam();message($('cameraStatus'),'停止しました')};window.addEventListener('pagehide',stopCam);render();
-</script></body></html>
+
+function validGtin(s){
+ if(!/^\d{13,14}$/.test(s))return false;
+ const a=[...s].map(Number);
+ const check=a.pop();
+ let sum=0;
+ for(let i=a.length-1,j=0;i>=0;i--,j++){
+  sum+=a[i]*(j%2===0?3:1)
+ }
+ return (10-sum%10)%10===check
+}
+
+function normalize(s){
+ const d=digits(s);
+ if(!validGtin(d))return null;
+ return d.padStart(14,'0')
+}
+
+function extract(raw){
+ let s=String(raw).trim();
+ let m=s.match(/\(01\)\s*(\d{14})|(?:^|\x1d|\]C1|\]d2)01(\d{14})/);
+ if(m)return normalize(m[1]||m[2]);
+ if(/^\d{13,14}$/.test(s))return normalize(s);
+ return null
+}
+
+function message(el,text,bad=false){
+ el.textContent=text;
+ el.className=bad?'hint bad':'hint ok'
+}
+
+function suppliers(){
+ let list=[...new Set([
+  ...Object.values(products).map(x=>x.supplier),
+  ...orders.map(x=>x.supplier)
+ ].filter(Boolean))];
+
+ if(!list.length)list=['卸A'];
+
+ for(const id of ['supplier','orderSupplier']){
+  const select=$(id),value=select.value;
+  select.replaceChildren();
+  for(const s of list){
+   const o=document.createElement('option');
+   o.value=s;
+   o.textContent=s;
+   select.append(o)
+  }
+  if(list.includes(value))select.value=value
+ }
+}
+
+function searchCode(raw){
+ $('code').value=raw;
+ let gtin=extract(raw);
+ active=null;
+ $('add').disabled=true;
+
+ for(const id of ['drug','pack','maker'])$(id).value='';
+
+ if(!gtin){
+  message($('decode'),'有効なGTINを抽出できませんでした。GS1の(01) + 14桁、または13/14桁を入力してください。',true);
+  return
+ }
+
+ message($('decode'),'GTIN-14: '+gtin+'（チェックデジット確認済）');
+
+ let p=products[gtin];
+
+ if(!p){
+  message($('productMsg'),'未登録のGTINです。下の医薬品マスタ登録で品名・包装を登録してください。',true);
+  $('mgtin').value=gtin;
+  return
+ }
+
+ active={...p,gtin};
+ $('drug').value=p.name;
+ $('pack').value=p.pack;
+ $('maker').value=p.maker;
+ $('supplier').value=p.supplier;
+ $('add').disabled=false;
+ message($('productMsg'),'医薬品名・包装・メーカーを現物と照合してください。')
+}
+
+$('lookup').onclick=()=>searchCode($('code').value);
+
+$('code').onkeydown=e=>{
+ if(e.key==='Enter')searchCode($('code').value)
+};
+
+$('register').onclick=()=>{
+ const gtin=normalize($('mgtin').value),
+ name=$('mname').value.trim(),
+ pack=$('mpack').value.trim(),
+ maker=$('mmaker').value.trim(),
+ supplier=$('msupplier').value.trim();
+
+ if(!gtin||!name||!pack||!supplier){
+  message($('masterStatus'),'GTIN（チェックデジット有効）、薬品名、包装、卸を入力してください。',true);
+  return
+ }
+
+ products[gtin]={name,pack,maker,supplier};
+ save();
+ suppliers();
+ message($('masterStatus'),'登録しました: '+gtin);
+
+ if(extract($('code').value)===gtin)searchCode($('code').value)
+};
+
+$('add').onclick=()=>{
+ if(!active)return;
+ let q=Number($('qty').value);
+
+ if(!Number.isSafeInteger(q)||q<1||q>9999){
+  alert('数量は1〜9999の整数にしてください');
+  return
+ }
+
+ const supplier=$('supplier').value;
+
+ if(!supplier){
+  alert('卸を選択してください');
+  return
+ }
+
+ let key=orders.findIndex(x=>x.gtin===active.gtin&&x.supplier===supplier);
+
+ if(key>=0){
+  if(orders[key].qty+q>9999){
+   alert('数量の上限を超えます');
+   return
+  }
+  orders[key].qty+=q
+ }else{
+  orders.push({...active,supplier,qty:q})
+ }
+
+ save();
+ render();
+ $('qty').value='1';
+ message($('productMsg'),'注文一覧に追加しました。')
+};
+
+function render(){
+ suppliers();
+ const body=$('lines');
+ body.replaceChildren();
+
+ for(let i=0;i<orders.length;i++){
+  const x=orders[i],tr=document.createElement('tr');
+
+  for(const v of [x.name,x.pack,String(x.qty),x.supplier]){
+   let td=document.createElement('td');
+   td.textContent=v;
+   tr.append(td)
+  }
+
+  let td=document.createElement('td'),
+      b=document.createElement('button');
+
+  b.className='secondary tiny';
+  b.textContent='削除';
+  b.onclick=()=>{
+   orders.splice(i,1);
+   save();
+   render()
+  };
+
+  td.append(b);
+  tr.append(td);
+  body.append(tr)
+ }
+
+ $('summary').textContent=`${orders.length}品目 / 合計${orders.reduce((a,x)=>a+x.qty,0)}包装`;
+}
+
+$('clear').onclick=()=>{
+ if(confirm('注文一覧を消去しますか？')){
+  orders=[];
+  save();
+  render()
+ }
+};
+
+function populatePaper(){
+ const supplier=$('orderSupplier').value,
+ lines=orders.filter(x=>x.supplier===supplier);
+
+ if(!lines.length){
+  alert('選択した卸の注文商品がありません');
+  return false
+ }
+
+ for(const [id,t] of [
+  ['pSupplier',supplier],
+  ['pDate',new Date().toLocaleDateString('ja-JP')],
+  ['pPharmacy',$('pharmacy').value],
+  ['pFromFax',$('fromfax').value],
+  ['pToFax',$('tofax').value]
+ ])$(id).textContent=t;
+
+ const tbody=$('pLines');
+ tbody.replaceChildren();
+
+ lines.forEach((x,i)=>{
+  const tr=document.createElement('tr');
+
+  for(let v of [String(i+1),x.name,x.pack,x.qty+'包装']){
+   const td=document.createElement('td');
+   td.textContent=v;
+   tr.append(td)
+  }
+
+  tbody.append(tr)
+ });
+ return true
+}
+
+$('print').onclick=()=>{
+ if(!$('pharmacy').value.trim()||!$('tofax').value.trim()){
+  alert('発注元と送付先FAXを入力してください');
+  return
+ }
+ if(populatePaper())window.print()
+};
+
+function csvCell(s){
+ return '"'+String(s??'').replace(/^([=+\-@\t\r])/,'\'$1').replace(/"/g,'""')+'"'
+}
+
+function downloadCsv(name,rows){
+ const csv='\uFEFF'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+ a.download=name;
+ a.click();
+ setTimeout(()=>URL.revokeObjectURL(a.href),1000)
+}
+
+$('export').onclick=()=>downloadCsv('orders.csv',[
+ ['gtin','name','pack','maker','supplier','qty'],
+ ...orders.map(x=>[x.gtin,x.name,x.pack,x.maker,x.supplier,x.qty])
+]);
+
+$('template').onclick=()=>downloadCsv('master_template.csv',[
+ ['gtin','name','pack','maker','supplier'],
+ ['', '医薬品名（例）','PTP100錠','メーカー名','卸A']
+]);
+
+$('masterExport').onclick=()=>downloadCsv('master_backup.csv',[
+ ['gtin','name','pack','maker','supplier'],
+ ...Object.entries(products).map(([k,v])=>[k,v.name,v.pack,v.maker,v.supplier])
+]);
+
+function parseCsv(text){
+ let rows=[],row=[],part='',quoted=false;
+
+ for(let i=0;i<text.length;i++){
+  let c=text[i];
+
+  if(c==='"'){
+   if(quoted&&text[i+1]==='"'){
+    part+='"';
+    i++
+   }else quoted=!quoted
+  }else if(c===','&&!quoted){
+   row.push(part);
+   part=''
+  }else if((c==='\n'||c==='\r')&&!quoted){
+   if(c==='\r'&&text[i+1]==='\n')i++;
+   row.push(part);
+   if(row.some(x=>x!==''))rows.push(row);
+   row=[];
+   part=''
+  }else part+=c
+ }
+
+ if(part||row.length){
+  row.push(part);
+  rows.push(row)
+ }
+ return rows
+}
+
+$('csv').onchange=async e=>{
+ const f=e.target.files[0];
+ if(!f)return;
+
+ const rows=parseCsv((await f.text()).replace(/^\uFEFF/,''));
+
+ if(rows.length<2||rows[0].join(',')!=='gtin,name,pack,maker,supplier'){
+  message($('masterStatus'),'CSV列は gtin,name,pack,maker,supplier にしてください。',true);
+  return
+ }
+
+ let count=0,rejected=0;
+
+ for(const r of rows.slice(1)){
+  let g=normalize(r[0]);
+
+  if(!g||!r[1]?.trim()||!r[2]?.trim()||!r[4]?.trim()){
+   rejected++;
+   continue
+  }
+
+  products[g]={
+   name:r[1].trim(),
+   pack:r[2].trim(),
+   maker:(r[3]||'').trim(),
+   supplier:r[4].trim()
+  };
+  count++
+ }
+
+ save();
+ suppliers();
+ message($('masterStatus'),`登録 ${count} 件 / 除外 ${rejected} 件。GTINと包装を確認してください。`);
+ e.target.value=''
+};
+
+function persist(id){
+ $(id).value=load('f_'+id,'');
+ $(id).oninput=()=>localStorage.setItem('f_'+id,JSON.stringify($(id).value))
+}
+
+['pharmacy','fromfax','tofax'].forEach(persist);
+
+const ZXING_VERSION='3.1.5';
+
+const readerScript=`https://cdn.jsdelivr.net/npm/zxing-wasm@${ZXING_VERSION}/dist/iife/reader/index.js`;
+
+let zxingPromise=null,
+    scanRunning=false;
+
+function ensureZXing(){
+ if(window.ZXingWASM?.readBarcodes){
+  return Promise.resolve(window.ZXingWASM)
+ }
+
+ if(zxingPromise)return zxingPromise;
+
+ zxingPromise=new Promise((resolve,reject)=>{
+  const script=document.createElement('script');
+  script.src=readerScript;
+
+  script.onload=()=>window.ZXingWASM?.readBarcodes
+   ?resolve(window.ZXingWASM)
+   :reject(new Error('ZXingWASM が利用できません'));
+
+  script.onerror=()=>reject(new Error('読取ライブラリの読み込みに失敗しました（CDNへの接続を確認）'));
+
+  document.head.append(script)
+ }).catch(e=>{
+  zxingPromise=null;
+  throw e
+ });
+
+ return zxingPromise
+}
+
+const scanOpts={
+ formats:['DataBarLtd','DataBar','DataBarExp','DataMatrix','EAN13','Code128'],
+ tryHarder:true,
+ tryInvert:true,
+ maxNumberOfSymbols:4
+};
+
+async function useResults(results){
+ for(const r of results){
+  const raw=String(r.text??'');
+  const gtin=extract(raw);
+
+  if(gtin){
+   searchCode(raw);
+   message($('cameraStatus'),`読取成功：${r.format||'GS1'} / GTIN ${gtin}`);
+   stopCam();
+   return true
+  }
+ }
+ return false
+}
+
+async function scanFrame(){
+ if(!scanRunning||busy||!stream||$('video').readyState<2)return;
+ busy=true;
+
+ try{
+  const w=$('video').videoWidth,
+        h=$('video').videoHeight;
+
+  if(!w||!h)return;
+
+  const cw=Math.min(w,1600),
+        ch=Math.round(h*cw/w);
+
+  const canvas=$('capture');
+  canvas.width=cw;
+  canvas.height=ch;
+
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage($('video'),0,0,cw,ch);
+
+  const results=await window.ZXingWASM.readBarcodes(
+   ctx.getImageData(0,0,cw,ch),
+   scanOpts
+  );
+
+  await useResults(results)
+ }catch(e){
+  message($('cameraStatus'),'読み取り処理エラー: '+e.message,true)
+ }finally{
+  busy=false
+ }
+}
+
+$('start').onclick=async()=>{
+ if(!navigator.mediaDevices?.getUserMedia){
+  message($('cameraStatus'),'HTTPS対応ブラウザで開いてください。',true);
+  return
+ }
+
+ try{
+  message($('cameraStatus'),'GS1読み取りエンジンを準備しています…');
+  await ensureZXing();
+
+  stopCam();
+
+  stream=await navigator.mediaDevices.getUserMedia({
+   video:{
+    facingMode:{ideal:'environment'},
+    width:{ideal:1920},
+    height:{ideal:1080}
+   },
+   audio:false
+  });
+
+  $('video').srcObject=stream;
+  $('video').hidden=false;
+  await $('video').play();
+
+  scanRunning=true;
+  message($('cameraStatus'),'GS1 DataBar Limited対応で読み取り中。コード全体を明るく、水平に、なるべく大きく写してください。');
+
+  scanTimer=setInterval(scanFrame,650)
+ }catch(e){
+  stopCam();
+  message($('cameraStatus'),'起動エラー: '+e.message,true)
+ }
+};
+
+$('photo').onchange=async e=>{
+ const file=e.target.files?.[0];
+ if(!file)return;
+
+ try{
+  message($('cameraStatus'),'画像を解析しています…');
+  await ensureZXing();
+
+  const results=await window.ZXingWASM.readBarcodes(file,scanOpts);
+
+  if(!await useResults(results)){
+   message($('cameraStatus'),'画像から有効なGTINが検出できませんでした。明るい場所でGS1部分を大きく撮影してください。',true)
+  }
+ }catch(err){
+  message($('cameraStatus'),'画像解析エラー: '+err.message,true)
+ }
+
+ e.target.value=''
+};
+
+function stopCam(){
+ scanRunning=false;
+ clearInterval(scanTimer);
+ scanTimer=null;
+ stream?.getTracks().forEach(t=>t.stop());
+ stream=null;
+ $('video').hidden=true;
+ $('video').srcObject=null
+}
+
+$('stop').onclick=()=>{
+ stopCam();
+ message($('cameraStatus'),'停止しました')
+};
+
+window.addEventListener('pagehide',stopCam);
+render();
+</script>
+</body>
+</html>
